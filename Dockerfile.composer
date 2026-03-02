@@ -1,0 +1,20 @@
+FROM php:8.4-cli-alpine
+
+# Installation des dépendances nécessaires pour Composer
+RUN apk add --no-cache \
+    git \
+    unzip \
+    curl \
+    && docker-php-ext-install pdo
+
+# Installation de Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Configuration Composer
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_HOME=/tmp/composer
+
+WORKDIR /app
+
+ENTRYPOINT ["composer"]
+CMD ["--version"]

@@ -1,8 +1,9 @@
 # Executables (local)
-DOCKER_COMP = docker compose
+DOCKER_COMP_APP = docker compose -f docker-compose.app.yaml
+DOCKER_COMP_DB = docker compose -f docker-compose.db.yaml
 
 # Docker containers
-PHP_CONT = $(DOCKER_COMP) exec php
+PHP_CONT = $(DOCKER_COMP_APP) exec php
 
 # Executables
 PHP      = $(PHP_CONT) php
@@ -11,51 +12,77 @@ SYMFONY  = $(PHP) bin/console
 
 # Misc
 .DEFAULT_GOAL = help
-.PHONY        : help build up start down logs sh composer vendor sf cc test
+.PHONY        : help build-all up-all start-all down-all stop-all logs-app logs-db sh bash migrate
 
-## —— 🎵 🐳 The Symfony Docker Makefile 🐳 🎵 ——————————————————————————————————
+## —— 🎵 🐳 Symfony Docker Makefile (2 Docker Compose) 🐳 🎵 ———————————————————
 help: ## Outputs this help screen
 	@grep -E '(^[a-zA-Z0-9\./_-]+:.*?##.*$$)|(^##)' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}{printf "\033[32m%-30s\033[0m %s\n", $$1, $$2}' | sed -e 's/\[32m##/[33m/'
 
-## —— Docker 🐳 ————————————————————————————————————————————————————————————————
-build: ## Builds the Docker images
-	@$(DOCKER_COMP) build --pull --no-cache
+## —— Docker 🐳 (Database) —————————————————————————————————————————————————————
+build-db: ## Build the PostgreSQL image
+	@$(DOCKER_COMP_DB) build --no-cache
 
-up: ## Start the docker hub in detached mode (no logs)
-	@$(DOCKER_COMP) up --detach
+up-db: ## Start the database in detached mode
+	@$(DOCKER_COMP_DB) up -d
 
-start: build up ## Build and start the containers
+down-db: ## Stop the database
+	@$(DOCKER_COMP_DB) down --remove-orphans
 
-down: ## Stop the docker hub
-	@$(DOCKER_COMP) down --remove-orphans
+logs-db: ## Show database logs
+	@$(DOCKER_COMP_DB) logs --tail=0 --follow
 
-logs: ## Show live logs
-	@$(DOCKER_COMP) logs --tail=0 --follow
+## —— Docker 🐳 (Application) ——————————————————————————————————————————————————
+build-app: ## Build the application images (Symfony, Adminer, Composer)
+	@$(DOCKER_COMP_APP) build --no-cache
 
-sh: ## Connect to the FrankenPHP container
+up-app: ## Start the application in detached mode
+	@$(DOCKER_COMP_APP) up -d
+
+down-app: ## Stop the application
+	@$(DOCKER_COMP_APP) down --remove-orphans
+
+logs-app: ## Show application logs
+	@$(DOCKER_COMP_APP) logs --tail=0 --follow
+
+## —— Docker 🐳 (All) ——————————————————————————————————————————————————————————
+build-all: build-db build-app ## Build all Docker images
+
+start-all: ## Build and start all containers (DB + App)
+	@echo "🔨 Building database..."
+	@$(DOCKER_COMP_DB) build --no-cache
+	@echo "🚀 Starting database..."
+	@$(DOCKER_COMP_DB) up -d
+	@echo "⏳ Waiting for database to be ready..."
+	@sleep 5
+	@echo "🔨 Building application..."
+	@$(DOCKER_COMP_APP) build --no-cache
+	@echo "🚀 Starting application..."
+	@$(DOCKER_COMP_APP) up -d
+	@echo "📊 Running migrations..."
+	@sleep 3
+	@$(SYMFONY) doctrine:migrations:migrate --no-interaction
+	@echo "✅ Project started successfully!"
+	@echo "🌐 Application: https://localhost"
+	@echo "🗄️  Adminer: http://localhost:8081"
+	@echo "📡 API: https://localhost/api/todos"
+
+stop-all: down-app down-db ## Stop all containers
+
+logs-all: ## Show all logs
+	@$(DOCKER_COMP_DB) logs --tail=50 &
+	@$(DOCKER_COMP_APP) logs --tail=50
+
+## —— Application Commands 🎯 ——————————————————————————————————————————————————
+sh: ## Connect to the PHP container (sh)
 	@$(PHP_CONT) sh
 
-bash: ## Connect to the FrankenPHP container via bash so up and down arrows go to previous commands
+bash: ## Connect to the PHP container (bash)
 	@$(PHP_CONT) bash
 
-test: ## Start tests with phpunit, pass the parameter "c=" to add options to phpunit, example: make test c="--group e2e --stop-on-failure"
-	@$(eval c ?=)
-	@$(DOCKER_COMP) exec -e APP_ENV=test php bin/phpunit $(c)
-
+migrate: ## Run database migrations
+	@$(SYMFONY) doctrine:migrations:migrate --no-interaction
 
 ## —— Composer 🧙 ——————————————————————————————————————————————————————————————
 composer: ## Run composer, pass the parameter "c=" to run a given command, example: make composer c='req symfony/orm-pack'
 	@$(eval c ?=)
 	@$(COMPOSER) $(c)
-
-vendor: ## Install vendors according to the current composer.lock file
-vendor: c=install --prefer-dist --no-dev --no-progress --no-scripts --no-interaction
-vendor: composer
-
-## —— Symfony 🎵 ———————————————————————————————————————————————————————————————
-sf: ## List all Symfony commands or pass the parameter "c=" to run a given command, example: make sf c=about
-	@$(eval c ?=)
-	@$(SYMFONY) $(c)
-
-cc: c=c:c ## Clear the cache
-cc: sf

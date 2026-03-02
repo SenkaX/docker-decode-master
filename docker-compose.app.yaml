@@ -1,23 +1,27 @@
 ---
 services:
   php:
-    image: ${IMAGES_PREFIX:-}app-php
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frankenphp_base
+    container_name: app-php
     restart: unless-stopped
     environment:
       SERVER_NAME: ${SERVER_NAME:-localhost}, php:80
       DEFAULT_URI: https://${SERVER_NAME:-localhost}:${HTTPS_PORT:-443}
       MERCURE_PUBLISHER_JWT_KEY: ${CADDY_MERCURE_JWT_SECRET:-!ChangeThisMercureHubJWTSecretKey!}
       MERCURE_SUBSCRIBER_JWT_KEY: ${CADDY_MERCURE_JWT_SECRET:-!ChangeThisMercureHubJWTSecretKey!}
-      # Run "composer require symfony/mercure-bundle" to install and configure the Mercure integration
       MERCURE_URL: ${CADDY_MERCURE_URL:-http://php/.well-known/mercure}
       MERCURE_PUBLIC_URL: ${CADDY_MERCURE_PUBLIC_URL:-https://${SERVER_NAME:-localhost}:${HTTPS_PORT:-443}/.well-known/mercure}
       MERCURE_JWT_SECRET: ${CADDY_MERCURE_JWT_SECRET:-!ChangeThisMercureHubJWTSecretKey!}
-      # The two next lines can be removed after initial installation
       SYMFONY_VERSION: ${SYMFONY_VERSION:-}
       STABILITY: ${STABILITY:-stable}
+      DATABASE_URL: "postgresql://app:SecurePassword123@database:5432/app?serverVersion=16&charset=utf8"
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+      - ./:/app
     ports:
       - name: http
         target: 80
@@ -31,43 +35,39 @@ services:
         target: 443
         published: ${HTTP3_PORT:-443}
         protocol: udp
-
-# Mercure is installed as a Caddy module, prevent the Flex recipe from installing another service
-###> symfony/mercure-bundle ###
-###< symfony/mercure-bundle ###
-
-###> doctrine/doctrine-bundle ###
-  database:
-    image: postgres:${POSTGRES_VERSION:-16}-alpine
-    env_file:
-      - .env.local
-    healthcheck:
-      test: ["CMD", "pg_isready", "-d", "${POSTGRES_DB:-app}", "-U", "${POSTGRES_USER:-app}"]
-      timeout: 5s
-      retries: 5
-      start_period: 60s
-    volumes:
-      - database_data:/var/lib/postgresql/data:rw
-      # You may use a bind-mounted host directory instead, so that it is harder to accidentally remove the volume and lose all your data!
-      # - ./docker/db/data:/var/lib/postgresql/data:rw
-###< doctrine/doctrine-bundle ###
+    networks:
+      - app-network
 
   adminer:
-    image: adminer
+    build:
+      context: .
+      dockerfile: Dockerfile.adminer
+    container_name: app-adminer
     restart: unless-stopped
     ports:
       - "8081:8080"
     environment:
       ADMINER_DEFAULT_SERVER: database
-    depends_on:
-      - database
+    networks:
+      - app-network
+
+  composer:
+    build:
+      context: .
+      dockerfile: Dockerfile.composer
+    container_name: app-composer
+    volumes:
+      - ./:/app
+    networks:
+      - app-network
+    profiles:
+      - tools
 
 volumes:
   caddy_data:
   caddy_config:
-###> symfony/mercure-bundle ###
-###< symfony/mercure-bundle ###
 
-###> doctrine/doctrine-bundle ###
-  database_data:
-###< doctrine/doctrine-bundle ###
+networks:
+  app-network:
+    external: true
+    name: app-network

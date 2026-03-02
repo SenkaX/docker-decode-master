@@ -1,0 +1,28 @@
+---
+services:
+  database:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    container_name: app-database
+    env_file:
+      - .env.local
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "${POSTGRES_DB:-app}", "-U", "${POSTGRES_USER:-app}"]
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - database_data:/var/lib/postgresql/data:rw
+    networks:
+      - app-network
+    ports:
+      - "5433:5432"
+
+volumes:
+  database_data:
+
+networks:
+  app-network:
+    driver: bridge
+    name: app-network

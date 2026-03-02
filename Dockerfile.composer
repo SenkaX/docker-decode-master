@@ -1,14 +1,26 @@
-FROM php:8.4-cli-alpine
+FROM alpine:3.19
 
-# Installation des dépendances nécessaires pour Composer
+# Installation de PHP et des dépendances nécessaires pour Composer
 RUN apk add --no-cache \
+    php83 \
+    php83-cli \
+    php83-phar \
+    php83-mbstring \
+    php83-openssl \
+    php83-json \
+    php83-curl \
+    php83-zip \
+    php83-tokenizer \
+    php83-dom \
+    php83-xml \
+    php83-xmlwriter \
     git \
     unzip \
     curl \
-    && docker-php-ext-install pdo
+    && ln -s /usr/bin/php83 /usr/bin/php
 
 # Installation de Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer
 
 # Configuration Composer
 ENV COMPOSER_ALLOW_SUPERUSER=1

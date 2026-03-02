@@ -1,11 +1,47 @@
-FROM postgres:16-alpine
+FROM alpine:3.19
+
+# Installation de PostgreSQL depuis Alpine
+RUN apk add --no-cache \
+    postgresql16 \
+    postgresql16-contrib
 
 # Variables d'environnement par défaut (peuvent être overridées)
 ENV POSTGRES_DB=${POSTGRES_DB:-app}
 ENV POSTGRES_USER=${POSTGRES_USER:-app}
 ENV POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-SecurePassword123}
+ENV PGDATA=/var/lib/postgresql/data
+
+# Créer les dossiers nécessaires
+RUN mkdir -p /var/lib/postgresql/data \
+    && mkdir -p /run/postgresql \
+    && chown -R postgres:postgres /var/lib/postgresql \
+    && chown -R postgres:postgres /run/postgresql
+
+# Script d'initialisation
+COPY <<EOF /docker-entrypoint.sh
+#!/bin/sh
+set -e
+
+if [ ! -s "\$PGDATA/PG_VERSION" ]; then
+    su-exec postgres initdb -D "\$PGDATA"
+    su-exec postgres pg_ctl -D "\$PGDATA" -o "-c listen_addresses=''" -w start
+    su-exec postgres psql -v ON_ERROR_STOP=1 --username postgres <<-EOSQL
+        CREATE USER \$POSTGRES_USER WITH SUPERUSER PASSWORD '\$POSTGRES_PASSWORD';
+        CREATE DATABASE \$POSTGRES_DB OWNER \$POSTGRES_USER;
+EOSQL
+    su-exec postgres pg_ctl -D "\$PGDATA" -m fast -w stop
+fi
+
+exec su-exec postgres postgres -D "\$PGDATA"
+EOF
+
+RUN chmod +x /docker-entrypoint.sh && apk add --no-cache su-exec
+
+USER postgres
 
 EXPOSE 5432
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
 
 # Healthcheck personnalisé
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 \

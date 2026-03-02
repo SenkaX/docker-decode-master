@@ -1,94 +1,95 @@
 #syntax=docker/dockerfile:1
 
-# Versions
-FROM dunglas/frankenphp:1-php8.4-alpine AS frankenphp_upstream
-
-# The different stages of this Dockerfile are meant to be built into separate images
-# https://docs.docker.com/develop/develop-images/multistage-build/#stop-at-a-specific-build-stage
-# https://docs.docker.com/compose/compose-file/#target
-
-
-# Base FrankenPHP image
-FROM frankenphp_upstream AS frankenphp_base
+# Base Alpine image
+FROM alpine:3.19
 
 WORKDIR /app
 
-VOLUME /app/var/
-
-# persistent / runtime deps
-# hadolint ignore=DL3008
+# Installation de PHP 8.3 et extensions nécessaires
 RUN apk add --no-cache \
-	file \
-	git \
-	&& install-php-extensions \
-		@composer \
-		apcu \
-		intl \
-		opcache \
-		zip \
-	;
+    php83 \
+    php83-fpm \
+    php83-pdo \
+    php83-pdo_pgsql \
+    php83-pgsql \
+    php83-session \
+    php83-tokenizer \
+    php83-xml \
+    php83-dom \
+    php83-xmlwriter \
+    php83-simplexml \
+    php83-mbstring \
+    php83-ctype \
+    php83-opcache \
+    php83-intl \
+    php83-zip \
+    php83-curl \
+    php83-openssl \
+    nginx \
+    curl \
+    git \
+    && ln -s /usr/bin/php83 /usr/bin/php
 
-# https://getcomposer.org/doc/03-cli.md#composer-allow-superuser
+# Installation de Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer
+
+# Configuration Composer
 ENV COMPOSER_ALLOW_SUPERUSER=1
 
-ENV PHP_INI_SCAN_DIR=":$PHP_INI_DIR/app.conf.d"
+# Configuration Nginx pour Symfony
+RUN mkdir -p /run/nginx && \
+    rm -f /etc/nginx/http.d/default.conf
 
-###> recipes ###
-###> doctrine/doctrine-bundle ###
-RUN install-php-extensions pdo_pgsql
-###< doctrine/doctrine-bundle ###
-###< recipes ###
+COPY <<EOF /etc/nginx/http.d/app.conf
+server {
+    listen 80;
+    server_name localhost;
+    root /app/public;
+    
+    location / {
+        try_files \$uri /index.php\$is_args\$args;
+    }
+    
+    location ~ ^/index\.php(/|$) {
+        fastcgi_pass 127.0.0.1:9000;
+        fastcgi_split_path_info ^(.+\.php)(/.*)$;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT \$realpath_root;
+        internal;
+    }
+    
+    location ~ \.php$ {
+        return 404;
+    }
+}
+EOF
 
-COPY --link frankenphp/conf.d/10-app.ini $PHP_INI_DIR/app.conf.d/
-COPY --link --chmod=755 frankenphp/docker-entrypoint.sh /usr/local/bin/docker-entrypoint
-COPY --link frankenphp/Caddyfile /etc/frankenphp/Caddyfile
+# Configuration PHP-FPM
+RUN sed -i 's/listen = 127.0.0.1:9000/listen = 127.0.0.1:9000/' /etc/php83/php-fpm.d/www.conf
 
-ENTRYPOINT ["docker-entrypoint"]
+# Script de démarrage
+COPY <<EOF /usr/local/bin/docker-entrypoint
+#!/bin/sh
+set -e
 
-HEALTHCHECK --start-period=60s CMD curl http://localhost:2019/metrics --silent --show-error --fail --output /dev/null || exit 1
-CMD [ "frankenphp", "run", "--config", "/etc/frankenphp/Caddyfile" ]
+# Démarrer PHP-FPM en arrière-plan
+php-fpm83 -D
 
-# Dev FrankenPHP image
-FROM frankenphp_base AS frankenphp_dev
+# Démarrer Nginx en premier plan
+exec nginx -g 'daemon off;'
+EOF
 
-ENV APP_ENV=dev
-ENV XDEBUG_MODE=off
-ENV FRANKENPHP_WORKER_CONFIG=watch
+RUN chmod +x /usr/local/bin/docker-entrypoint
 
-RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
+# Copier les fichiers Symfony
+COPY --chown=nginx:nginx . /app
 
-RUN set -eux; \
-	install-php-extensions \
-		xdebug \
-	;
+# Installation des dépendances
+RUN composer install --no-interaction --optimize-autoloader
 
-COPY --link frankenphp/conf.d/20-app.dev.ini $PHP_INI_DIR/app.conf.d/
+EXPOSE 80
 
-CMD [ "frankenphp", "run", "--config", "/etc/frankenphp/Caddyfile", "--watch" ]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint"]
 
-# Prod FrankenPHP image
-FROM frankenphp_base AS frankenphp_prod
-
-ENV APP_ENV=prod
-
-RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
-
-COPY --link frankenphp/conf.d/20-app.prod.ini $PHP_INI_DIR/app.conf.d/
-
-# prevent the reinstallation of vendors at every changes in the source code
-COPY --link composer.* symfony.* ./
-RUN set -eux; \
-	composer install --no-cache --prefer-dist --no-dev --no-autoloader --no-scripts --no-progress
-
-# copy sources
-COPY --link --exclude=frankenphp/ . ./
-
-RUN set -eux; \
-	mkdir -p var/cache var/log var/share; \
-	composer dump-autoload --classmap-authoritative --no-dev; \
-	composer dump-env prod; \
-	composer run-script --no-dev post-install-cmd; \
-	if [ -f importmap.php ]; then \
-		php bin/console asset-map:compile; \
-	fi; \
-	chmod +x bin/console; sync;
+HEALTHCHECK --start-period=60s CMD curl http://localhost --silent --show-error --fail --output /dev/null || exit 1

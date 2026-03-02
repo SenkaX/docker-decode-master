@@ -1,34 +1,33 @@
-#syntax=docker/dockerfile:1
-
 # Base Alpine image
-FROM alpine:3.19
+FROM alpine:edge
 
 WORKDIR /app
 
 # Installation de PHP 8.3 et extensions nécessaires
 RUN apk add --no-cache \
-    php83 \
-    php83-fpm \
-    php83-pdo \
-    php83-pdo_pgsql \
-    php83-pgsql \
-    php83-session \
-    php83-tokenizer \
-    php83-xml \
-    php83-dom \
-    php83-xmlwriter \
-    php83-simplexml \
-    php83-mbstring \
-    php83-ctype \
-    php83-opcache \
-    php83-intl \
-    php83-zip \
-    php83-curl \
-    php83-openssl \
+    php84 \
+    php84-fpm \
+    php84-phar \
+    php84-pdo \
+    php84-pdo_pgsql \
+    php84-pgsql \
+    php84-session \
+    php84-tokenizer \
+    php84-xml \
+    php84-dom \
+    php84-xmlwriter \
+    php84-simplexml \
+    php84-mbstring \
+    php84-ctype \
+    php84-opcache \
+    php84-intl \
+    php84-zip \
+    php84-curl \
+    php84-openssl \
+    php84-iconv \
     nginx \
     curl \
-    git \
-    && ln -s /usr/bin/php83 /usr/bin/php
+    git
 
 # Installation de Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer
@@ -66,7 +65,7 @@ server {
 EOF
 
 # Configuration PHP-FPM
-RUN sed -i 's/listen = 127.0.0.1:9000/listen = 127.0.0.1:9000/' /etc/php83/php-fpm.d/www.conf
+RUN sed -i 's/listen = 127.0.0.1:9000/listen = 127.0.0.1:9000/' /etc/php84/php-fpm.d/www.conf
 
 # Script de démarrage
 COPY <<EOF /usr/local/bin/docker-entrypoint
@@ -74,7 +73,7 @@ COPY <<EOF /usr/local/bin/docker-entrypoint
 set -e
 
 # Démarrer PHP-FPM en arrière-plan
-php-fpm83 -D
+php-fpm84 -D
 
 # Démarrer Nginx en premier plan
 exec nginx -g 'daemon off;'
@@ -87,6 +86,10 @@ COPY --chown=nginx:nginx . /app
 
 # Installation des dépendances
 RUN composer install --no-interaction --optimize-autoloader
+
+# Créer les répertoires nécessaires avec les bonnes permissions
+RUN mkdir -p /app/var/cache /app/var/log /app/var/share && \
+    chown -R nginx:nginx /app/var
 
 EXPOSE 80
 

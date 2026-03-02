@@ -1,20 +1,19 @@
-FROM alpine:3.19
+FROM alpine:edge
 
 # Installation de PHP et des dépendances nécessaires
 RUN apk add --no-cache \
-    php83 \
-    php83-cli \
-    php83-pdo \
-    php83-pdo_pgsql \
-    php83-pgsql \
-    php83-session \
-    wget \
-    && ln -s /usr/bin/php83 /usr/bin/php
+    php84 \
+    php84-cli \
+    php84-pdo \
+    php84-pdo_pgsql \
+    php84-pgsql \
+    php84-session \
+    wget
 
 # Configuration PHP pour supprimer les warnings
-RUN mkdir -p /etc/php83/conf.d \
-    && echo "error_reporting = E_ALL & ~E_WARNING & ~E_NOTICE" > /etc/php83/conf.d/error-reporting.ini \
-    && echo "display_errors = Off" >> /etc/php83/conf.d/error-reporting.ini
+RUN mkdir -p /etc/php84/conf.d \
+    && echo "error_reporting = E_ALL & ~E_WARNING & ~E_NOTICE" > /etc/php84/conf.d/error-reporting.ini \
+    && echo "display_errors = Off" >> /etc/php84/conf.d/error-reporting.ini
 
 # Téléchargement d'Adminer
 RUN mkdir -p /var/www/html \

@@ -1,23 +1,23 @@
-FROM alpine:3.19
+FROM alpine:edge
 
 # Installation de PHP et des dépendances nécessaires pour Composer
 RUN apk add --no-cache \
-    php83 \
-    php83-cli \
-    php83-phar \
-    php83-mbstring \
-    php83-openssl \
-    php83-json \
-    php83-curl \
-    php83-zip \
-    php83-tokenizer \
-    php83-dom \
-    php83-xml \
-    php83-xmlwriter \
+    php84 \
+    php84-cli \
+    php84-phar \
+    php84-mbstring \
+    php84-openssl \
+    php84-json \
+    php84-curl \
+    php84-zip \
+    php84-tokenizer \
+    php84-dom \
+    php84-xml \
+    php84-xmlwriter \
+    php84-iconv \
     git \
     unzip \
     curl \
-    && ln -s /usr/bin/php83 /usr/bin/php
 
 # Installation de Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer

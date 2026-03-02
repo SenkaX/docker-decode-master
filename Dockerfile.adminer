@@ -1,12 +1,19 @@
-FROM php:8.4-fpm-alpine
+FROM php:8.4-cli-alpine
 
 # Installation des dépendances nécessaires
 RUN apk add --no-cache \
     postgresql-dev \
-    && docker-php-ext-install pdo_pgsql pgsql
+    wget \
+    && docker-php-ext-install pdo_pgsql pgsql \
+    && docker-php-ext-enable pdo_pgsql pgsql
+
+# Configuration PHP pour supprimer les warnings
+RUN echo "error_reporting = E_ALL & ~E_WARNING & ~E_NOTICE" > /usr/local/etc/php/conf.d/error-reporting.ini \
+    && echo "display_errors = Off" >> /usr/local/etc/php/conf.d/error-reporting.ini
 
 # Téléchargement d'Adminer
-RUN wget -O /var/www/html/index.php https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php \
+RUN mkdir -p /var/www/html \
+    && wget -O /var/www/html/index.php https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php \
     && chmod 644 /var/www/html/index.php
 
 WORKDIR /var/www/html
